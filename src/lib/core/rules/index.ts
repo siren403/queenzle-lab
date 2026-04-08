@@ -17,6 +17,10 @@ export function getQueenIndexes(cells: CellMark[]): number[] {
 	return cells.flatMap((mark, index) => (mark === 'queen' ? [index] : []));
 }
 
+export function getHypothesisIndexes(cells: CellMark[]): number[] {
+	return cells.flatMap((mark, index) => (mark === 'hypothesis' ? [index] : []));
+}
+
 export function getIndexesForRow(row: number, size: number): number[] {
 	return range(size).map((col) => toIndex(row, col, size));
 }
@@ -73,12 +77,11 @@ export function getConflictsForQueenPlacement(
 	regions.add(regionId);
 
 	return {
+		id: `feedback-${index}-${Date.now()}`,
+		kind: 'error',
 		cells: [...conflicts],
-		rows: [...rows],
-		cols: [...cols],
-		regions: [...regions],
-		reason: 'This queen breaks the row, column, region, or adjacency rules.',
-		severity: 'warning'
+		message: '이 위치에는 퀸을 확정할 수 없어요.',
+		animationPreset: 'queen-error'
 	};
 }
 
@@ -91,36 +94,53 @@ export function isLegalQueenPlacement(
 }
 
 export function isSolved(puzzle: PuzzleSpec, cells: CellMark[]): boolean {
-	const queens = getQueenIndexes(cells);
-	if (queens.length !== puzzle.size) return false;
+	const solutionSet = new Set(puzzle.solution);
 
-	for (const queenIndex of queens) {
-		if (
-			!isLegalQueenPlacement(
-				puzzle,
-				cells.map((mark, index) => (index === queenIndex ? 'empty' : mark)),
-				queenIndex
-			)
-		) {
-			return false;
+	for (let index = 0; index < cells.length; index += 1) {
+		const mark = cells[index];
+		if (solutionSet.has(index)) {
+			if (mark !== 'queen' && mark !== 'hypothesis') return false;
+			continue;
 		}
-	}
-
-	const regionMap = getRegionMap(puzzle);
-
-	for (let row = 0; row < puzzle.size; row += 1) {
-		if (getIndexesForRow(row, puzzle.size).filter((index) => cells[index] === 'queen').length !== 1)
-			return false;
-	}
-	for (let col = 0; col < puzzle.size; col += 1) {
-		if (
-			getIndexesForColumn(col, puzzle.size).filter((index) => cells[index] === 'queen').length !== 1
-		)
-			return false;
-	}
-	for (const indexes of regionMap.values()) {
-		if (indexes.filter((index) => cells[index] === 'queen').length !== 1) return false;
+		if (mark !== 'x' && mark !== 'fixed-x') return false;
 	}
 
 	return true;
+}
+
+export function isCorrectQueen(puzzle: PuzzleSpec, index: number): boolean {
+	return puzzle.solution.includes(index);
+}
+
+export function getForcedXIndexes(puzzle: PuzzleSpec, queens: number[]): number[] {
+	const indexes = new Set<number>();
+	const regionMap = getRegionMap(puzzle);
+
+	for (const queenIndex of queens) {
+		const { row, col } = toRowCol(queenIndex, puzzle.size);
+		for (const candidate of getIndexesForRow(row, puzzle.size)) {
+			if (candidate !== queenIndex) indexes.add(candidate);
+		}
+		for (const candidate of getIndexesForColumn(col, puzzle.size)) {
+			if (candidate !== queenIndex) indexes.add(candidate);
+		}
+		for (const candidate of getAdjacentNeighbors(queenIndex, puzzle.size)) {
+			indexes.add(candidate);
+		}
+		const regionId = puzzle.regions[queenIndex];
+		for (const candidate of regionMap.get(regionId) ?? []) {
+			if (candidate !== queenIndex) indexes.add(candidate);
+		}
+	}
+
+	return [...indexes];
+}
+
+export function applyFixedXFromQueens(puzzle: PuzzleSpec, cells: CellMark[]): CellMark[] {
+	const next: CellMark[] = cells.map((mark) => (mark === 'fixed-x' ? 'empty' : mark));
+	for (const index of getForcedXIndexes(puzzle, getQueenIndexes(next))) {
+		if (next[index] === 'queen') continue;
+		next[index] = 'fixed-x';
+	}
+	return next;
 }

@@ -9,6 +9,7 @@ export function buildBoardViewModel(session: SessionState): BoardViewModel {
 		selectionFeedback: session.selectionFeedback,
 		inputEnabled: true,
 		solved: isSolved(session.puzzle, session.cells),
+		message: session.selectionFeedback?.message ?? '탭으로 표시하고 길게 눌러 퀸을 확정하세요.',
 		cells: session.cells.map((mark, index) => {
 			const coord = toRowCol(index, session.puzzle.size);
 			return {

@@ -1,32 +1,46 @@
-import type { CellMark } from '../types';
+import type { CellMark, FeatureFlags } from '../types';
 
 export function createEmptyCells(size: number): CellMark[] {
 	return Array.from({ length: size * size }, () => 'empty');
 }
 
-export function toggleXCell(cells: CellMark[], index: number): CellMark[] {
-	if (cells[index] === 'queen') return cells;
-
+export function cycleCellMark(cells: CellMark[], index: number, flags: FeatureFlags): CellMark[] {
+	if (cells[index] === 'queen' || cells[index] === 'fixed-x') return cells;
 	const next = cells.slice();
-	next[index] = next[index] === 'x' ? 'empty' : 'x';
+	const cycle = flags.hypothesisMarker ? ['empty', 'x', 'hypothesis'] : ['empty', 'x'];
+	const current = next[index] === 'hypothesis' && !flags.hypothesisMarker ? 'empty' : next[index];
+	const currentIndex = cycle.indexOf(current);
+	next[index] = cycle[(currentIndex + 1) % cycle.length] as CellMark;
 	return next;
 }
 
-export function setQueenCell(cells: CellMark[], index: number): CellMark[] {
+export function stampQueenCell(cells: CellMark[], index: number): CellMark[] {
 	const next = cells.slice();
-	next[index] = next[index] === 'queen' ? 'empty' : 'queen';
+	next[index] = 'queen';
 	return next;
 }
 
-export function applyDragX(cells: CellMark[], indices: number[]): CellMark[] {
-	let changed = false;
-	const next = cells.slice();
-
-	for (const index of indices) {
-		if (next[index] === 'queen' || next[index] === 'x') continue;
-		next[index] = 'x';
-		changed = true;
+export function applyPaintCell(
+	cells: CellMark[],
+	index: number,
+	mode: 'mark-x' | 'erase-x'
+): CellMark[] {
+	if (cells[index] === 'queen' || cells[index] === 'hypothesis' || cells[index] === 'fixed-x') {
+		return cells;
 	}
 
-	return changed ? next : cells;
+	const next = cells.slice();
+	if (mode === 'mark-x' && next[index] === 'empty') {
+		next[index] = 'x';
+		return next;
+	}
+	if (mode === 'erase-x' && next[index] === 'x') {
+		next[index] = 'empty';
+		return next;
+	}
+	return cells;
+}
+
+export function stripFixedMarks(cells: CellMark[]): CellMark[] {
+	return cells.map((mark) => (mark === 'fixed-x' ? 'empty' : mark));
 }

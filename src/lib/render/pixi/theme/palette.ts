@@ -4,6 +4,7 @@ export const PIXI_THEME = {
 	background: 0xffffff,
 	gridStroke: 0xcfc7ec,
 	text: 0x342a52,
+	accent: 0x8f7cf5,
 	x: 0x7b78a9,
 	queen: 0xf06a97,
 	feedback: 0xff9b95,

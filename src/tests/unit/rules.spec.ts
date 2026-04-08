@@ -5,9 +5,9 @@ import type { PuzzleSpec } from '$lib/core/types';
 const puzzle: PuzzleSpec = {
 	id: 'rules-fixture',
 	seed: 1,
-	size: 4,
-	regions: [0, 0, 1, 1, 0, 0, 1, 1, 2, 2, 3, 3, 2, 2, 3, 3],
-	solution: [1, 7, 8, 14],
+	size: 5,
+	regions: [0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 2, 2, 2, 2, 2, 3, 3, 3, 3, 3, 4, 4, 4, 4, 4],
+	solution: [0, 7, 14, 16, 23],
 	source: 'catalog',
 	antiPatternReady: true
 };
@@ -16,6 +16,15 @@ describe('queen placement rules', () => {
 	it('detects row and adjacency conflicts', () => {
 		const cells = [
 			'queen',
+			'empty',
+			'empty',
+			'empty',
+			'empty',
+			'empty',
+			'empty',
+			'empty',
+			'empty',
+			'empty',
 			'empty',
 			'empty',
 			'empty',

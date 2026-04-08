@@ -1,16 +1,16 @@
-import type { PresetId } from '$lib/core/types';
+import type { PresetId, PuzzleSize } from '$lib/core/types';
 
 export interface LabQueryState {
-	size: 6 | 7;
+	size: PuzzleSize;
 	seed: number;
 	preset: PresetId;
 }
 
-const DEFAULT_SEED = 12031;
+const DEFAULT_SEED = 5103;
 
 export function parseLabQuery(url: URL): LabQueryState {
 	const rawSize = Number(url.searchParams.get('size'));
-	const size = rawSize === 7 ? 7 : 6;
+	const size = rawSize === 7 ? 7 : rawSize === 6 ? 6 : 5;
 	const rawSeed = Number(url.searchParams.get('seed'));
 	const seed = Number.isFinite(rawSeed) && rawSeed > 0 ? rawSeed : DEFAULT_SEED;
 	const rawPreset = url.searchParams.get('preset');

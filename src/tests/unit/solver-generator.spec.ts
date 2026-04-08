@@ -4,6 +4,14 @@ import { generatePuzzle } from '$lib/core/generator';
 import { countSolutions, passesAntiPatternFilter } from '$lib/core/solver';
 
 describe('catalog and generator', () => {
+	it('realizes a unique 5x5 catalog puzzle', () => {
+		const puzzle = getCatalogPuzzle(5);
+		const result = countSolutions(puzzle, { limit: 2 });
+
+		expect(result.count).toBe(1);
+		expect(passesAntiPatternFilter(puzzle)).toBe(true);
+	});
+
 	it('realizes a unique catalog puzzle', () => {
 		const puzzle = getCatalogPuzzle(6);
 		const result = countSolutions(puzzle, { limit: 2 });

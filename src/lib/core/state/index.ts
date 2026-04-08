@@ -1,8 +1,27 @@
-import { applyDragX, createEmptyCells, setQueenCell, toggleXCell } from '../commands';
+import {
+	applyPaintCell,
+	createEmptyCells,
+	cycleCellMark,
+	stampQueenCell,
+	stripFixedMarks
+} from '../commands';
 import { getCatalogPuzzle } from '../catalog';
 import { generatePuzzle } from '../generator';
-import { getConflictsForQueenPlacement, isSolved } from '../rules';
-import type { FeatureFlags, GameCommand, PuzzleSpec, SessionState } from '../types';
+import {
+	applyFixedXFromQueens,
+	getConflictsForQueenPlacement,
+	isCorrectQueen,
+	isSolved
+} from '../rules';
+import type {
+	FeatureFlags,
+	GameCommand,
+	PuzzleSize,
+	PuzzleSpec,
+	SelectionFeedback,
+	SessionState,
+	SnapshotItem
+} from '../types';
 
 function cloneCells(cells: SessionState['cells']): SessionState['cells'] {
 	return cells.slice();
@@ -27,12 +46,11 @@ function pushHistory(session: SessionState, nextCells: SessionState['cells']): S
 		},
 		selectionFeedback: isSolved(session.puzzle, nextCells)
 			? {
-					cells: [],
-					rows: [],
-					cols: [],
-					regions: [],
-					reason: 'Puzzle solved.',
-					severity: 'success'
+					id: `solved-${Date.now()}`,
+					kind: 'success',
+					cells: session.puzzle.solution.slice(),
+					message: '퍼즐을 해결했어요.',
+					animationPreset: 'board-solved'
 				}
 			: null
 	};
@@ -48,39 +66,83 @@ export function createSessionState(puzzle: PuzzleSpec, flags: FeatureFlags): Ses
 			future: [],
 			limit: 100
 		},
-		snapshotSlot: null,
+		snapshotSlots: [],
 		selectionFeedback: null
+	};
+}
+
+function buildSnapshotItem(session: SessionState): SnapshotItem {
+	const queens = session.cells.filter((mark) => mark === 'queen').length;
+	const xs = session.cells.filter((mark) => mark === 'x' || mark === 'fixed-x').length;
+	const hypotheses = session.cells.filter((mark) => mark === 'hypothesis').length;
+
+	return {
+		id: `snapshot-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+		cells: session.cells.slice(),
+		previewCells: session.cells.slice(),
+		savedAt: new Date().toISOString(),
+		label: `퀸 ${queens} · 엑스 ${xs} · 가설 ${hypotheses}`,
+		size: session.puzzle.size,
+		seed: session.puzzle.seed
+	};
+}
+
+function withFeedback(session: SessionState, feedback: SelectionFeedback | null): SessionState {
+	return {
+		...session,
+		selectionFeedback: feedback
 	};
 }
 
 export function applyCommand(session: SessionState, command: GameCommand): SessionState {
 	switch (command.type) {
-		case 'toggleX':
-			return pushHistory(session, toggleXCell(session.cells, command.index));
-		case 'setQueen': {
-			if (session.cells[command.index] === 'queen') {
-				return pushHistory(session, setQueenCell(session.cells, command.index));
-			}
-
-			if (session.flags.blockIllegalQueenPlacement) {
-				const feedback = getConflictsForQueenPlacement(
-					session.puzzle,
-					session.cells,
-					command.index
-				);
-				if (feedback) {
-					return {
-						...session,
-						selectionFeedback: feedback
-					};
-				}
-			}
-
-			return pushHistory(session, setQueenCell(session.cells, command.index));
+		case 'cycleCell': {
+			const baseCells = stripFixedMarks(session.cells);
+			const nextCells = cycleCellMark(baseCells, command.index, session.flags);
+			return pushHistory(session, applyFixedXFromQueens(session.puzzle, nextCells));
 		}
-		case 'dragCells':
+		case 'confirmQueen': {
+			if (session.cells[command.index] === 'queen' || session.cells[command.index] === 'fixed-x') {
+				return session;
+			}
+			if (
+				session.flags.blockIllegalQueenPlacement &&
+				!isCorrectQueen(session.puzzle, command.index)
+			) {
+				return withFeedback(session, {
+					id: `queen-error-${command.index}-${Date.now()}`,
+					kind: 'error',
+					cells: [command.index],
+					message: '이 칸은 정답 퀸 위치가 아니에요.',
+					animationPreset: 'queen-error'
+				});
+			}
+			const conflict = getConflictsForQueenPlacement(session.puzzle, session.cells, command.index);
+			if (conflict) {
+				return withFeedback(session, conflict);
+			}
+
+			const nextCells = applyFixedXFromQueens(
+				session.puzzle,
+				stampQueenCell(stripFixedMarks(session.cells), command.index)
+			);
+			return withFeedback(pushHistory(session, nextCells), {
+				id: `queen-success-${command.index}-${Date.now()}`,
+				kind: 'success',
+				cells: [command.index],
+				message: '퀸을 확정했어요.',
+				animationPreset: 'queen-success'
+			});
+		}
+		case 'paintCell':
 			return session.flags.dragMarking
-				? pushHistory(session, applyDragX(session.cells, command.indices))
+				? pushHistory(
+						session,
+						applyFixedXFromQueens(
+							session.puzzle,
+							applyPaintCell(stripFixedMarks(session.cells), command.index, command.mode)
+						)
+					)
 				: session;
 		case 'resetBoard':
 			return pushHistory(session, createEmptyCells(session.puzzle.size));
@@ -112,19 +174,26 @@ export function applyCommand(session: SessionState, command: GameCommand): Sessi
 				selectionFeedback: null
 			};
 		}
-		case 'saveSnapshot':
-			return {
-				...session,
-				snapshotSlot: {
-					cells: cloneCells(session.cells),
-					savedAt: new Date().toISOString()
+		case 'saveSnapshot': {
+			const snapshotSlots = [buildSnapshotItem(session), ...session.snapshotSlots].slice(0, 5);
+			return withFeedback(
+				{
+					...session,
+					snapshotSlots
 				},
-				selectionFeedback: null
-			};
-		case 'restoreSnapshot':
-			return session.snapshotSlot
-				? pushHistory(session, session.snapshotSlot.cells.slice())
-				: session;
+				{
+					id: `snapshot-${Date.now()}`,
+					kind: 'info',
+					cells: [],
+					message: '스냅샷을 저장했어요.',
+					animationPreset: 'snapshot-saved'
+				}
+			);
+		}
+		case 'restoreSnapshot': {
+			const snapshot = session.snapshotSlots.find((item) => item.id === command.snapshotId);
+			return snapshot ? pushHistory(session, snapshot.cells.slice()) : session;
+		}
 		case 'setFlags':
 			return {
 				...session,
@@ -135,7 +204,7 @@ export function applyCommand(session: SessionState, command: GameCommand): Sessi
 }
 
 export function resolvePuzzle(options: {
-	size: 6 | 7;
+	size: PuzzleSize;
 	seed: number;
 	antiPatternFilter: boolean;
 }): PuzzleSpec {

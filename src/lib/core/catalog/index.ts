@@ -4,10 +4,13 @@ import { generatePuzzle } from '../generator';
 export interface CatalogEntry {
 	id: string;
 	seed: number;
-	size: 6 | 7;
+	size: 5 | 6 | 7;
 }
 
 export const CATALOG_ENTRIES: CatalogEntry[] = [
+	{ id: 'catalog-5-1', seed: 5103, size: 5 },
+	{ id: 'catalog-5-2', seed: 18503, size: 5 },
+	{ id: 'catalog-5-3', seed: 28657, size: 5 },
 	{ id: 'catalog-6-1', seed: 12031, size: 6 },
 	{ id: 'catalog-6-2', seed: 48291, size: 6 },
 	{ id: 'catalog-6-3', seed: 73103, size: 6 },
@@ -22,7 +25,7 @@ export function listCatalogEntries(size?: number): CatalogEntry[] {
 	return size ? CATALOG_ENTRIES.filter((entry) => entry.size === size) : CATALOG_ENTRIES;
 }
 
-export function getCatalogPuzzle(size: 6 | 7, seed?: number): PuzzleSpec {
+export function getCatalogPuzzle(size: 5 | 6 | 7, seed?: number): PuzzleSpec {
 	const entry =
 		CATALOG_ENTRIES.find((candidate) => candidate.size === size && candidate.seed === seed) ??
 		CATALOG_ENTRIES.find((candidate) => candidate.size === size);

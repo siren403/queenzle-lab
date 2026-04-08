@@ -5,24 +5,44 @@
 	import { onMount } from 'svelte';
 	import { applyCommand, createSessionState, resolvePuzzle } from '$lib/core/state';
 	import { loadSession, saveSession } from '$lib/core/persistence';
-	import type { FeatureFlags, PresetId, RendererEvent, SessionState } from '$lib/core/types';
+	import type {
+		FeatureFlags,
+		PresetId,
+		PuzzleSize,
+		RendererEvent,
+		SessionState
+	} from '$lib/core/types';
 	import { buildBoardViewModel } from '$lib/render/pixi/board-view';
 	import PixiBoard from '$lib/ui/components/PixiBoard.svelte';
-	import { getPresetFlags, PRESETS } from '$lib/ui/presets';
+	import { FEATURE_LABELS, getPresetFlags, PRESET_LABELS, PRESETS } from '$lib/ui/presets';
 	import { buildLabQuery, getRandomSeed, parseLabQuery } from '$lib/ui/stores/lab-query';
 
-	let selectedSize = $state<6 | 7>(6);
-	let selectedSeed = $state(12031);
-	let seedInput = $state('12031');
+	let selectedSize = $state<PuzzleSize>(5);
+	let selectedSeed = $state(5103);
+	let seedInput = $state('5103');
 	let selectedPreset = $state<PresetId>('modern-minimal');
 	let session = $state<SessionState | null>(null);
+	let panelOpen = $state(false);
 
 	const viewModel = $derived(session ? buildBoardViewModel(session) : null);
 	const canUndo = $derived((session?.history.past.length ?? 0) > 0);
 	const canRedo = $derived((session?.history.future.length ?? 0) > 0);
-	const hasSnapshot = $derived(Boolean(session?.snapshotSlot));
-	const sourceLabel = $derived(session?.puzzle.source === 'catalog' ? 'Catalog' : 'Generator');
-	const statusLabel = $derived(viewModel?.solved ? 'Solved' : 'In progress');
+	const sourceLabel = $derived(session?.puzzle.source === 'catalog' ? '검증된 시드' : '생성 시도');
+	const statusLabel = $derived(viewModel?.solved ? '해결 완료' : '진행 중');
+	const boardHint = $derived(
+		session?.flags.hypothesisMarker
+			? '탭: 없음 → X → 가설 · 길게 누르기: 퀸 확정'
+			: '탭: 없음 → X · 길게 누르기: 퀸 확정'
+	);
+
+	function formatSavedAt(savedAt: string): string {
+		return new Intl.DateTimeFormat('ko-KR', {
+			month: 'numeric',
+			day: 'numeric',
+			hour: '2-digit',
+			minute: '2-digit'
+		}).format(new Date(savedAt));
+	}
 
 	function syncUrl(): void {
 		const query = buildLabQuery({
@@ -31,7 +51,11 @@
 			preset: selectedPreset
 		}).toString();
 
-		void goto(resolve(`/lab?${query}`), { replaceState: true, noScroll: true, keepFocus: true });
+		void goto(resolve(`/lab?${query}`), {
+			replaceState: true,
+			noScroll: true,
+			keepFocus: true
+		});
 	}
 
 	function applySession(next: SessionState): void {
@@ -41,7 +65,12 @@
 		}
 	}
 
-	function loadPuzzle(size: 6 | 7, seed: number, preset: PresetId, preferStored = false): void {
+	function loadPuzzle(
+		size: PuzzleSize,
+		seed: number,
+		preset: PresetId,
+		preferStored = false
+	): void {
 		selectedSize = size;
 		selectedSeed = seed;
 		seedInput = String(seed);
@@ -75,15 +104,20 @@
 		if (!session) return;
 
 		switch (event.type) {
-			case 'clickCell':
-				applySession(applyCommand(session, { type: 'toggleX', index: event.index }));
+			case 'cycleCell':
+				applySession(applyCommand(session, { type: 'cycleCell', index: event.index }));
 				return;
-			case 'doubleClickCell':
-				applySession(applyCommand(session, { type: 'setQueen', index: event.index }));
+			case 'confirmQueen':
+				applySession(applyCommand(session, { type: 'confirmQueen', index: event.index }));
 				return;
-			case 'dragCells':
-				applySession(applyCommand(session, { type: 'dragCells', indices: event.indices }));
-				return;
+			case 'paintCell':
+				applySession(
+					applyCommand(session, {
+						type: 'paintCell',
+						index: event.index,
+						mode: event.mode
+					})
+				);
 		}
 	}
 
@@ -133,7 +167,7 @@
 		syncUrl();
 	}
 
-	function changeSize(size: 6 | 7): void {
+	function changeSize(size: PuzzleSize): void {
 		loadPuzzle(size, selectedSeed, selectedPreset);
 		syncUrl();
 	}
@@ -143,7 +177,7 @@
 		const stored = loadSession();
 
 		if (stored && currentUrl.searchParams.size === 0) {
-			selectedSize = stored.puzzle.size as 6 | 7;
+			selectedSize = stored.puzzle.size;
 			selectedSeed = stored.puzzle.seed;
 			seedInput = String(stored.puzzle.seed);
 			selectedPreset = 'custom';
@@ -159,176 +193,388 @@
 </script>
 
 <svelte:head>
-	<title>Modern Queenzle Lab</title>
+	<title>모던 퀸즐 연구실</title>
 </svelte:head>
 
 <div class="page-shell">
 	<div class="lab-grid">
-		<section class="glass-panel lab-panel">
-			<div style="display:grid; gap:14px;">
-				<span class="eyebrow">Playable Research</span>
-				<h1 style="margin:0;">Modern Queenzle Lab</h1>
-				<p style="margin:0; color:var(--muted); line-height:1.6;">
-					같은 퍼즐 위에서 `classic`과 `modern-minimal`을 바꿔가며, 드래그 마킹과 anti-pattern
-					필터의 체감을 비교합니다.
-				</p>
+		<section class="glass-panel board-stack">
+			<div class="board-head">
+				<div style="display:grid; gap:10px;">
+					<span class="eyebrow">플레이 가능한 연구 페이지</span>
+					<h1 style="margin:0;">모던 퀸즐 연구실</h1>
+					<p class="subtle">
+						같은 퍼즐 위에서 기본 모드와 모던 미니멀 규칙을 비교하고, 가설 마커와 즉시 드래그 마킹이
+						체감에 어떤 차이를 만드는지 검증합니다.
+					</p>
+				</div>
+				<div class="status-badges">
+					<span class="metric-chip">{statusLabel}</span>
+					<span class="metric-chip">{sourceLabel}</span>
+					<span class="metric-chip">{selectedSize}x{selectedSize}</span>
+				</div>
 			</div>
 
-			<div style="display:grid; gap:12px;">
+			{#if session && viewModel}
+				<PixiBoard {viewModel} flags={session.flags} onRendererEvent={handleRendererEvent} />
+			{/if}
+
+			<div class="glass-strip">
+				<strong>입력 안내</strong>
+				<span>{boardHint}</span>
+				<span>{viewModel?.message}</span>
+			</div>
+
+			<div class="snapshot-section">
+				<div class="snapshot-header">
+					<div>
+						<strong>스냅샷</strong>
+						<p class="subtle" style="margin:6px 0 0;">
+							최대 5개까지 저장하고 바로 복원할 수 있어요.
+						</p>
+					</div>
+					<button class="btn" type="button" onclick={() => dispatch({ type: 'saveSnapshot' })}>
+						현재 상태 저장
+					</button>
+				</div>
+
+				<div class="snapshot-tray" aria-label="저장된 스냅샷 목록">
+					{#if session && session.snapshotSlots.length > 0}
+						{#each session.snapshotSlots as snapshot (snapshot.id)}
+							<button
+								class="snapshot-card"
+								type="button"
+								onclick={() => dispatch({ type: 'restoreSnapshot', snapshotId: snapshot.id })}
+								aria-label={`${formatSavedAt(snapshot.savedAt)} 스냅샷 복원`}
+							>
+								<div
+									class="snapshot-preview"
+									style={`grid-template-columns: repeat(${snapshot.size}, 1fr);`}
+								>
+									{#each snapshot.previewCells as mark, index (index)}
+										<div class={`preview-cell ${mark}`} aria-hidden="true">
+											{#if mark === 'x' || mark === 'fixed-x'}
+												×
+											{:else if mark === 'hypothesis'}
+												△
+											{:else if mark === 'queen'}
+												Q
+											{/if}
+										</div>
+									{/each}
+								</div>
+								<div class="snapshot-meta">
+									<strong>{formatSavedAt(snapshot.savedAt)}</strong>
+									<span>{snapshot.label}</span>
+									<span>시드 {snapshot.seed}</span>
+								</div>
+							</button>
+						{/each}
+					{:else}
+						<div class="snapshot-empty">아직 저장된 스냅샷이 없어요.</div>
+					{/if}
+				</div>
+			</div>
+		</section>
+
+		<section class="glass-panel control-panel" class:open={panelOpen}>
+			<div class="control-header">
+				<div>
+					<span class="eyebrow">제어 패널</span>
+					<h2 style="margin:10px 0 0;">비교 설정</h2>
+				</div>
+				<button
+					class="btn ghost mobile-only"
+					type="button"
+					onclick={() => (panelOpen = !panelOpen)}
+				>
+					{panelOpen ? '접기' : '펼치기'}
+				</button>
+			</div>
+
+			<div class="panel-body">
 				<div class="field">
-					<label for="seed-input">Seed</label>
+					<label for="seed-input">퍼즐 시드</label>
 					<div class="button-row">
-						<input id="seed-input" bind:value={seedInput} inputmode="numeric" />
-						<button class="btn" type="button" onclick={applySeedInput}>Load</button>
-						<button class="btn ghost" type="button" onclick={regenerate}>New Puzzle</button>
+						<input
+							id="seed-input"
+							bind:value={seedInput}
+							inputmode="numeric"
+							aria-label="퍼즐 시드 입력"
+						/>
+						<button class="btn" type="button" onclick={applySeedInput}>불러오기</button>
+						<button class="btn ghost" type="button" onclick={regenerate}>새 퍼즐</button>
 					</div>
 				</div>
 
 				<div class="field">
-					<label for="size-select">Board Size</label>
+					<label for="size-select">보드 크기</label>
 					<select
 						id="size-select"
 						value={selectedSize}
+						aria-label="보드 크기 선택"
 						onchange={(event) =>
-							changeSize(Number((event.currentTarget as HTMLSelectElement).value) as 6 | 7)}
+							changeSize(Number((event.currentTarget as HTMLSelectElement).value) as PuzzleSize)}
 					>
+						<option value="5">5x5</option>
 						<option value="6">6x6</option>
 						<option value="7">7x7</option>
 					</select>
 				</div>
-			</div>
 
-			<div style="display:grid; gap:12px;">
-				<strong>Preset</strong>
-				<div class="button-row">
-					{#each Object.keys(PRESETS) as preset (preset)}
-						<button
-							class={`btn ${selectedPreset === preset ? 'primary' : ''}`}
-							type="button"
-							onclick={() => setPreset(preset as PresetId)}
-						>
-							{preset}
-						</button>
-					{/each}
-				</div>
-			</div>
-
-			{#if session}
-				<div style="display:grid; gap:10px;">
-					<strong>Flags</strong>
-					<label class="toggle-row">
-						<input
-							type="checkbox"
-							checked={session.flags.dragMarking}
-							onchange={() => toggleFlag('dragMarking')}
-						/>
-						<span>Drag marking</span>
-					</label>
-					<label class="toggle-row">
-						<input
-							type="checkbox"
-							checked={session.flags.antiPatternFilter}
-							onchange={() => toggleFlag('antiPatternFilter')}
-						/>
-						<span>Anti-pattern filter</span>
-					</label>
-					<label class="toggle-row">
-						<input
-							type="checkbox"
-							checked={session.flags.blockIllegalQueenPlacement}
-							onchange={() => toggleFlag('blockIllegalQueenPlacement')}
-						/>
-						<span>Block illegal queen placement</span>
-					</label>
-				</div>
-
-				<div class="button-row">
-					<button
-						class="btn"
-						type="button"
-						disabled={!canUndo}
-						onclick={() => dispatch({ type: 'undo' })}>Undo</button
-					>
-					<button
-						class="btn"
-						type="button"
-						disabled={!canRedo}
-						onclick={() => dispatch({ type: 'redo' })}>Redo</button
-					>
-					<button class="btn" type="button" onclick={() => dispatch({ type: 'resetBoard' })}
-						>Reset</button
-					>
-				</div>
-
-				<div class="button-row">
-					<button class="btn" type="button" onclick={() => dispatch({ type: 'saveSnapshot' })}
-						>Save Snapshot</button
-					>
-					<button
-						class="btn"
-						type="button"
-						disabled={!hasSnapshot}
-						onclick={() => dispatch({ type: 'restoreSnapshot' })}
-					>
-						Restore Snapshot
-					</button>
-				</div>
-
-				<div class="metrics-grid">
-					<div class="metric">
-						<span class="eyebrow" style="width:max-content;">Status</span>
-						<strong>{statusLabel}</strong>
-						<span style="color:var(--muted);"
-							>{session.selectionFeedback?.reason ?? 'Keep proving cells.'}</span
-						>
-					</div>
-					<div class="metric">
-						<strong>{sourceLabel}</strong>
-						<span style="color:var(--muted);">
-							{session.puzzle.source === 'catalog'
-								? 'Validated deterministic seed'
-								: 'Generated with fallback protection'}
-						</span>
+				<div class="field">
+					<strong>모드</strong>
+					<div class="button-row">
+						{#each Object.keys(PRESETS) as preset (preset)}
+							<button
+								class={`btn ${selectedPreset === preset ? 'primary' : ''}`}
+								type="button"
+								onclick={() => setPreset(preset as PresetId)}
+							>
+								{PRESET_LABELS[preset as PresetId]}
+							</button>
+						{/each}
 					</div>
 				</div>
-			{/if}
-		</section>
 
-		<section class="glass-panel board-panel">
-			{#if session && viewModel}
-				<PixiBoard {viewModel} flags={session.flags} onRendererEvent={handleRendererEvent} />
-			{:else}
-				<div style="padding:24px;">Loading board…</div>
-			{/if}
+				{#if session}
+					<div class="field">
+						<strong>세부 기능</strong>
+						<div class="toggle-list">
+							{#each Object.keys(session.flags) as flag (flag)}
+								<label class="toggle-row">
+									<input
+										type="checkbox"
+										checked={session.flags[flag as keyof FeatureFlags]}
+										aria-label={FEATURE_LABELS[flag as keyof FeatureFlags]}
+										onchange={() => toggleFlag(flag as keyof FeatureFlags)}
+									/>
+									<span>{FEATURE_LABELS[flag as keyof FeatureFlags]}</span>
+								</label>
+							{/each}
+						</div>
+					</div>
+
+					<div class="field">
+						<strong>빠른 조작</strong>
+						<div class="button-row">
+							<button
+								class="btn"
+								type="button"
+								disabled={!canUndo}
+								onclick={() => dispatch({ type: 'undo' })}
+							>
+								되돌리기
+							</button>
+							<button
+								class="btn"
+								type="button"
+								disabled={!canRedo}
+								onclick={() => dispatch({ type: 'redo' })}
+							>
+								다시 하기
+							</button>
+							<button
+								class="btn ghost"
+								type="button"
+								onclick={() => dispatch({ type: 'resetBoard' })}
+							>
+								초기화
+							</button>
+						</div>
+					</div>
+
+					<div class="metrics-grid">
+						<div class="metric">
+							<strong>{session.puzzle.source === 'catalog' ? '카탈로그 퍼즐' : '생성 퍼즐'}</strong>
+							<span class="subtle">현재 시드 {session.puzzle.seed}</span>
+						</div>
+						<div class="metric">
+							<strong>{session.history.past.length}회</strong>
+							<span class="subtle">되돌리기 가능</span>
+						</div>
+					</div>
+				{/if}
+			</div>
 		</section>
+	</div>
+
+	<div class="mobile-bar glass-panel">
+		<button
+			class="btn"
+			type="button"
+			disabled={!canUndo}
+			onclick={() => dispatch({ type: 'undo' })}
+		>
+			되돌리기
+		</button>
+		<button
+			class="btn"
+			type="button"
+			disabled={!canRedo}
+			onclick={() => dispatch({ type: 'redo' })}
+		>
+			다시 하기
+		</button>
+		<button class="btn" type="button" onclick={() => dispatch({ type: 'resetBoard' })}>
+			초기화
+		</button>
+		<button class="btn ghost" type="button" onclick={() => (panelOpen = !panelOpen)}> 설정 </button>
 	</div>
 </div>
 
 <style>
 	.lab-grid {
 		display: grid;
-		grid-template-columns: minmax(320px, 380px) minmax(0, 1fr);
+		grid-template-columns: minmax(0, 1fr) minmax(320px, 380px);
 		gap: 20px;
 		align-items: start;
 	}
 
-	.lab-panel {
-		padding: 24px;
+	.board-stack,
+	.control-panel {
+		padding: 20px;
 		display: grid;
-		gap: 22px;
-		position: sticky;
-		top: 24px;
+		gap: 18px;
 	}
 
-	.board-panel {
+	.board-head {
+		display: flex;
+		justify-content: space-between;
+		gap: 16px;
+		align-items: start;
+	}
+
+	.status-badges {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 10px;
+		justify-content: flex-end;
+	}
+
+	.metric-chip {
+		padding: 8px 12px;
+		border-radius: 999px;
+		background: rgba(255, 255, 255, 0.76);
+		border: 1px solid rgba(128, 117, 169, 0.14);
+		font-size: 0.9rem;
+		font-weight: 700;
+	}
+
+	.subtle {
+		color: var(--muted);
+		line-height: 1.6;
+	}
+
+	.glass-strip {
+		display: grid;
+		gap: 6px;
+		padding: 14px 16px;
+		border-radius: 18px;
+		background: rgba(255, 255, 255, 0.72);
+		border: 1px solid rgba(128, 117, 169, 0.12);
+	}
+
+	.snapshot-section {
+		display: grid;
+		gap: 12px;
+	}
+
+	.snapshot-header {
+		display: flex;
+		justify-content: space-between;
+		gap: 12px;
+		align-items: center;
+	}
+
+	.snapshot-tray {
+		display: flex;
+		gap: 12px;
+		overflow-x: auto;
+		padding-bottom: 4px;
+	}
+
+	.snapshot-card {
+		min-width: 184px;
+		display: grid;
+		gap: 10px;
+		padding: 12px;
+		border-radius: 18px;
+		border: 1px solid rgba(128, 117, 169, 0.14);
+		background: rgba(255, 255, 255, 0.84);
+		cursor: pointer;
+		text-align: left;
+	}
+
+	.snapshot-preview {
+		display: grid;
+		gap: 2px;
+		padding: 4px;
+		border-radius: 14px;
+		background: rgba(239, 236, 255, 0.65);
+	}
+
+	.preview-cell {
+		aspect-ratio: 1;
+		border-radius: 6px;
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		font-size: 0.62rem;
+		font-weight: 700;
+		background: rgba(255, 255, 255, 0.9);
+		color: var(--x-color);
+	}
+
+	.preview-cell.hypothesis {
+		color: var(--accent-strong);
+	}
+
+	.preview-cell.queen {
+		color: var(--queen-strong);
+	}
+
+	.preview-cell.fixed-x {
+		background: #dadce4;
+		color: #7a7f8c;
+	}
+
+	.snapshot-meta {
+		display: grid;
+		gap: 4px;
+		font-size: 0.83rem;
+		color: var(--muted);
+	}
+
+	.snapshot-empty {
 		padding: 16px;
+		border-radius: 18px;
+		background: rgba(255, 255, 255, 0.7);
+		color: var(--muted);
+	}
+
+	.control-header {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		gap: 12px;
+	}
+
+	.panel-body {
+		display: grid;
+		gap: 18px;
+	}
+
+	.toggle-list {
+		display: grid;
+		gap: 10px;
 	}
 
 	.toggle-row {
 		display: flex;
 		align-items: center;
-		gap: 10px;
-		color: var(--text);
+		gap: 12px;
+		min-height: 44px;
 	}
 
 	.metrics-grid {
@@ -337,19 +583,48 @@
 		gap: 12px;
 	}
 
-	@media (max-width: 1100px) {
+	.mobile-bar {
+		position: sticky;
+		bottom: 12px;
+		display: none;
+		grid-template-columns: repeat(4, minmax(0, 1fr));
+		gap: 10px;
+		padding: 12px;
+		margin-top: 18px;
+	}
+
+	.mobile-only {
+		display: none;
+	}
+
+	@media (max-width: 1099px) {
 		.lab-grid {
 			grid-template-columns: 1fr;
 		}
-
-		.lab-panel {
-			position: static;
-		}
 	}
 
-	@media (max-width: 640px) {
-		.metrics-grid {
-			grid-template-columns: 1fr;
+	@media (max-width: 767px) {
+		.page-shell {
+			padding-bottom: 92px;
+		}
+
+		.board-head,
+		.snapshot-header {
+			flex-direction: column;
+			align-items: stretch;
+		}
+
+		.panel-body {
+			display: none;
+		}
+
+		.control-panel.open .panel-body {
+			display: grid;
+		}
+
+		.mobile-bar,
+		.mobile-only {
+			display: grid;
 		}
 	}
 </style>

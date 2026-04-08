@@ -1,26 +1,43 @@
-export type CellMark = 'empty' | 'x' | 'queen';
+export type CellMark = 'empty' | 'x' | 'hypothesis' | 'queen' | 'fixed-x';
 export type PuzzleSource = 'catalog' | 'generator';
+export type PuzzleSize = 5 | 6 | 7;
 export type PresetId = 'classic' | 'modern-minimal' | 'custom';
+export type DragPaintMode = 'mark-x' | 'erase-x';
+export type AnimationPreset =
+	| 'none'
+	| 'mark-x'
+	| 'erase-x'
+	| 'hypothesis'
+	| 'queen-success'
+	| 'queen-error'
+	| 'snapshot-saved'
+	| 'board-solved';
 
 export interface FeatureFlags {
 	dragMarking: boolean;
 	antiPatternFilter: boolean;
 	blockIllegalQueenPlacement: boolean;
+	hypothesisMarker: boolean;
 }
 
 export interface PuzzleSpec {
 	id: string;
 	seed: number;
-	size: number;
+	size: PuzzleSize;
 	regions: number[];
 	solution: number[];
 	source: PuzzleSource;
 	antiPatternReady: boolean;
 }
 
-export interface SnapshotSlot {
+export interface SnapshotItem {
+	id: string;
 	cells: CellMark[];
+	previewCells: CellMark[];
 	savedAt: string;
+	label: string;
+	size: PuzzleSize;
+	seed: number;
 }
 
 export interface HistoryState {
@@ -30,12 +47,11 @@ export interface HistoryState {
 }
 
 export interface SelectionFeedback {
+	id: string;
+	kind: 'error' | 'success' | 'info';
 	cells: number[];
-	rows: number[];
-	cols: number[];
-	regions: number[];
-	reason: string;
-	severity: 'warning' | 'success';
+	message: string;
+	animationPreset: AnimationPreset;
 }
 
 export interface SessionState {
@@ -43,7 +59,7 @@ export interface SessionState {
 	flags: FeatureFlags;
 	cells: CellMark[];
 	history: HistoryState;
-	snapshotSlot: SnapshotSlot | null;
+	snapshotSlots: SnapshotItem[];
 	selectionFeedback: SelectionFeedback | null;
 }
 
@@ -63,22 +79,23 @@ export interface BoardViewModel {
 	selectionFeedback: SelectionFeedback | null;
 	inputEnabled: boolean;
 	solved: boolean;
+	message: string;
 }
 
 export type RendererEvent =
-	| { type: 'clickCell'; index: number }
-	| { type: 'doubleClickCell'; index: number }
-	| { type: 'dragCells'; indices: number[] };
+	| { type: 'cycleCell'; index: number }
+	| { type: 'confirmQueen'; index: number }
+	| { type: 'paintCell'; index: number; mode: DragPaintMode };
 
 export type GameCommand =
-	| { type: 'toggleX'; index: number }
-	| { type: 'setQueen'; index: number }
-	| { type: 'dragCells'; indices: number[] }
+	| { type: 'cycleCell'; index: number }
+	| { type: 'confirmQueen'; index: number }
+	| { type: 'paintCell'; index: number; mode: DragPaintMode }
 	| { type: 'resetBoard' }
 	| { type: 'undo' }
 	| { type: 'redo' }
 	| { type: 'saveSnapshot' }
-	| { type: 'restoreSnapshot' }
+	| { type: 'restoreSnapshot'; snapshotId: string }
 	| { type: 'setFlags'; flags: FeatureFlags };
 
 export interface SolveOptions {

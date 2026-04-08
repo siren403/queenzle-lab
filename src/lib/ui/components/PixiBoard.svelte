@@ -13,6 +13,7 @@
 	let { viewModel, flags, onRendererEvent }: Props = $props();
 	let host = $state<HTMLElement | null>(null);
 	let renderer = $state<PixiBoardRenderer | null>(null);
+	let appInstance = $state<Awaited<ReturnType<typeof createBoardApp>> | null>(null);
 
 	onMount(() => {
 		let alive = true;
@@ -24,6 +25,7 @@
 				app.destroy(true);
 				return;
 			}
+			appInstance = app;
 			renderer = new PixiBoardRenderer(app, host, onRendererEvent);
 			renderer.update(viewModel, flags);
 		})();
@@ -31,6 +33,7 @@
 		return () => {
 			alive = false;
 			renderer?.destroy();
+			appInstance?.destroy(true, { children: true });
 		};
 	});
 

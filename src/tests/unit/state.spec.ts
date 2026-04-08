@@ -5,36 +5,49 @@ import type { FeatureFlags, PuzzleSpec } from '$lib/core/types';
 const flags: FeatureFlags = {
 	dragMarking: true,
 	antiPatternFilter: true,
-	blockIllegalQueenPlacement: true
+	blockIllegalQueenPlacement: true,
+	hypothesisMarker: true
 };
 
 const puzzle: PuzzleSpec = {
 	id: 'state-fixture',
 	seed: 1,
-	size: 4,
-	regions: [0, 0, 1, 1, 0, 0, 1, 1, 2, 2, 3, 3, 2, 2, 3, 3],
-	solution: [1, 7, 8, 14],
+	size: 5,
+	regions: [0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 2, 2, 2, 2, 2, 3, 3, 3, 3, 3, 4, 4, 4, 4, 4],
+	solution: [0, 7, 14, 16, 23],
 	source: 'catalog',
 	antiPatternReady: true
 };
 
 describe('session state', () => {
-	it('tracks history, reset, and snapshot restore', () => {
+	it('tracks cycle rules, fixed-x, and snapshot restore', () => {
 		let session = createSessionState(puzzle, flags);
-		session = applyCommand(session, { type: 'toggleX', index: 0 });
-		session = applyCommand(session, { type: 'dragCells', indices: [1, 2] });
+		session = applyCommand(session, { type: 'cycleCell', index: 6 });
+		session = applyCommand(session, { type: 'cycleCell', index: 6 });
+		expect(session.cells[6]).toBe('hypothesis');
 
-		expect(session.cells[0]).toBe('x');
+		session = applyCommand(session, { type: 'paintCell', index: 1, mode: 'mark-x' });
+		session = applyCommand(session, { type: 'paintCell', index: 2, mode: 'mark-x' });
+		expect(session.cells[1]).toBe('x');
 		expect(session.cells[2]).toBe('x');
-		expect(session.history.past.length).toBe(2);
+		expect(session.history.past.length).toBeGreaterThanOrEqual(4);
+
+		session = applyCommand(session, { type: 'confirmQueen', index: 0 });
+		expect(session.cells[0]).toBe('queen');
+		expect(session.cells[1]).toBe('fixed-x');
+		expect(session.cells[5]).toBe('fixed-x');
 
 		session = applyCommand(session, { type: 'saveSnapshot' });
+		expect(session.snapshotSlots).toHaveLength(1);
 		session = applyCommand(session, { type: 'resetBoard' });
 		expect(session.cells.every((mark) => mark === 'empty')).toBe(true);
 
-		session = applyCommand(session, { type: 'restoreSnapshot' });
-		expect(session.cells[0]).toBe('x');
-		expect(session.cells[2]).toBe('x');
+		session = applyCommand(session, {
+			type: 'restoreSnapshot',
+			snapshotId: session.snapshotSlots[0].id
+		});
+		expect(session.cells[0]).toBe('queen');
+		expect(session.cells[1]).toBe('fixed-x');
 
 		session = applyCommand(session, { type: 'undo' });
 		expect(session.cells.every((mark) => mark === 'empty')).toBe(true);

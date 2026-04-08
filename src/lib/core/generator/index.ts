@@ -1,10 +1,10 @@
-import type { PuzzleSpec } from '../types';
+import type { PuzzleSize, PuzzleSpec } from '../types';
 import { isUniquelySolvable, passesAntiPatternFilter } from '../solver';
 import { getOrthogonalNeighbors, range } from '$lib/shared/utils/grid';
 
 export interface GeneratorConfig {
 	seed: number;
-	size: number;
+	size: PuzzleSize;
 	antiPatternFilter: boolean;
 	timeBudgetMs: number;
 	source?: 'catalog' | 'generator';
