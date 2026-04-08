@@ -1,0 +1,11 @@
+export const REGION_COLORS = [0xf7d8e5, 0xdde7ff, 0xe3f3dc, 0xffe9cc, 0xe5defc, 0xdff3ef, 0xfce2d6];
+
+export const PIXI_THEME = {
+	background: 0xffffff,
+	gridStroke: 0xcfc7ec,
+	text: 0x342a52,
+	x: 0x7b78a9,
+	queen: 0xf06a97,
+	feedback: 0xff9b95,
+	solved: 0x7bc8a4
+};
