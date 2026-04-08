@@ -79,6 +79,13 @@ export class PixiBoardRenderer {
 		this.host = host;
 		this.onEvent = onEvent;
 
+		this.rootLayer.eventMode = 'none';
+		this.cellLayer.eventMode = 'passive';
+		this.effectLayer.eventMode = 'none';
+		this.markerLayer.eventMode = 'none';
+		this.topEffectLayer.eventMode = 'none';
+		this.topMarkerLayer.eventMode = 'none';
+
 		this.rootLayer.addChild(this.cellLayer);
 		this.rootLayer.addChild(this.effectLayer);
 		this.rootLayer.addChild(this.markerLayer);
@@ -401,6 +408,7 @@ export class PixiBoardRenderer {
 					: 1;
 
 		const marker = this.createMarkerDisplay(markerMark, animation);
+		marker.eventMode = 'none';
 		marker.alpha = alpha;
 		marker.scale.set(scale);
 		marker.x = x + this.layout!.cellSize / 2;
@@ -422,11 +430,13 @@ export class PixiBoardRenderer {
 				}
 			});
 			marker.anchor.set(0.5);
+			marker.eventMode = 'none';
 			container.addChild(marker);
 			return container;
 		}
 
 		const graphics = new Graphics();
+		graphics.eventMode = 'none';
 		const stroke = {
 			color: this.getMarkerColor(mark, animation),
 			width: Math.max(2.75, this.layout!.cellSize * 0.062),
