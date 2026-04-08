@@ -17,6 +17,7 @@
 
 	onMount(() => {
 		let alive = true;
+		let resizeObserver: ResizeObserver | null = null;
 
 		(async () => {
 			if (!host) return;
@@ -28,10 +29,16 @@
 			appInstance = app;
 			renderer = new PixiBoardRenderer(app, host, onRendererEvent);
 			renderer.update(viewModel, flags);
+			resizeObserver = new ResizeObserver(() => {
+				if (!renderer) return;
+				renderer.update(viewModel, flags);
+			});
+			resizeObserver.observe(host);
 		})();
 
 		return () => {
 			alive = false;
+			resizeObserver?.disconnect();
 			renderer?.destroy();
 			appInstance?.destroy(true, { children: true });
 		};
@@ -47,9 +54,11 @@
 
 <style>
 	.pixi-host {
-		width: 100%;
-		min-height: min(70vw, 720px);
-		height: min(70vw, 720px);
+		width: min(100%, 720px);
+		aspect-ratio: 1 / 1;
+		height: auto;
+		min-height: 0;
+		margin-inline: auto;
 		border-radius: 28px;
 		background: linear-gradient(
 			180deg,
@@ -75,15 +84,13 @@
 
 	@media (max-width: 960px) {
 		.pixi-host {
-			min-height: 62vw;
-			height: 62vw;
+			width: 100%;
 		}
 	}
 
 	@media (max-width: 640px) {
 		.pixi-host {
-			min-height: 76vw;
-			height: 76vw;
+			border-radius: 22px;
 		}
 	}
 </style>

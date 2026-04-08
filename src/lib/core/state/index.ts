@@ -17,6 +17,7 @@ import {
 	isCorrectQueen,
 	isSolved
 } from '../rules';
+import type { CellMark } from '../types';
 import type {
 	FeatureFlags,
 	GameCommand,
@@ -40,6 +41,19 @@ function buildSolvedFeedback(session: SessionState): SelectionFeedback | null {
 		message: '퍼즐을 해결했어요.',
 		animationPreset: 'board-solved'
 	};
+}
+
+function normalizeSolvedCells(session: SessionState, nextCells: CellMark[]): CellMark[] {
+	if (!isSolved(session.puzzle, nextCells)) return nextCells;
+
+	const normalized = nextCells.slice();
+	for (const index of session.puzzle.solution) {
+		if (normalized[index] === 'hypothesis') {
+			normalized[index] = 'queen';
+		}
+	}
+
+	return applyFixedXFromQueens(session.puzzle, normalized);
 }
 
 function buildHypothesisContradictionFeedback(
@@ -80,8 +94,9 @@ function deriveBoardFeedback(
 }
 
 function pushHistory(session: SessionState, nextCells: SessionState['cells']): SessionState {
-	if (nextCells === session.cells) return session;
-	if (nextCells.every((mark, index) => mark === session.cells[index])) return session;
+	const finalizedCells = normalizeSolvedCells(session, nextCells);
+	if (finalizedCells === session.cells) return session;
+	if (finalizedCells.every((mark, index) => mark === session.cells[index])) return session;
 
 	const past = [...session.history.past, cloneCells(session.cells)];
 	while (past.length > session.history.limit) {
@@ -90,13 +105,13 @@ function pushHistory(session: SessionState, nextCells: SessionState['cells']): S
 
 	return {
 		...session,
-		cells: nextCells,
+		cells: finalizedCells,
 		history: {
 			...session.history,
 			past,
 			future: []
 		},
-		selectionFeedback: deriveBoardFeedback(session, nextCells)
+		selectionFeedback: deriveBoardFeedback(session, finalizedCells)
 	};
 }
 

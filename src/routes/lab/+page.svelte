@@ -311,14 +311,13 @@
 					<label for="size-select">보드 크기</label>
 					<select
 						id="size-select"
-						value={selectedSize}
+						bind:value={selectedSize}
 						aria-label="보드 크기 선택"
-						onchange={(event) =>
-							changeSize(Number((event.currentTarget as HTMLSelectElement).value) as PuzzleSize)}
+						onchange={() => changeSize(selectedSize)}
 					>
-						<option value="5">5x5</option>
-						<option value="6">6x6</option>
-						<option value="7">7x7</option>
+						<option value={5}>5x5</option>
+						<option value={6}>6x6</option>
+						<option value={7}>7x7</option>
 					</select>
 				</div>
 

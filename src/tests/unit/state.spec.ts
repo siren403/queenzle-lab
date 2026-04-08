@@ -59,4 +59,24 @@ describe('session state', () => {
 		session = applyCommand(session, { type: 'undo' });
 		expect(session.cells.every((mark) => mark === 'empty')).toBe(true);
 	});
+
+	it('promotes solved hypothesis markers into queens', () => {
+		let session = createSessionState(puzzle, flags);
+		const solutionSet = new Set(puzzle.solution);
+
+		for (let index = 0; index < puzzle.size * puzzle.size; index += 1) {
+			if (solutionSet.has(index)) {
+				session = applyCommand(session, { type: 'cycleCell', index });
+				session = applyCommand(session, { type: 'cycleCell', index });
+				continue;
+			}
+
+			session = applyCommand(session, { type: 'cycleCell', index });
+		}
+
+		expect(session.selectionFeedback?.reason).toBe('board-solved');
+		for (const index of puzzle.solution) {
+			expect(session.cells[index]).toBe('queen');
+		}
+	});
 });
