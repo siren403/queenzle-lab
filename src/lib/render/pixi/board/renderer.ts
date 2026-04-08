@@ -80,7 +80,7 @@ export class PixiBoardRenderer {
 		this.host = host;
 		this.onEvent = onEvent;
 
-		this.rootLayer.eventMode = 'none';
+		this.rootLayer.eventMode = 'passive';
 		this.cellLayer.eventMode = 'passive';
 		this.effectLayer.eventMode = 'none';
 		this.markerLayer.eventMode = 'none';
@@ -396,6 +396,8 @@ export class PixiBoardRenderer {
 		graphics.eventMode = 'static';
 		graphics.cursor = 'pointer';
 		graphics.on('pointerdown', (event) => this.handlePointerDown(cell, event));
+		graphics.on('pointerup', this.handlePointerUp);
+		graphics.on('pointerupoutside', this.handlePointerUp);
 		this.cellLayer.addChild(graphics);
 	}
 

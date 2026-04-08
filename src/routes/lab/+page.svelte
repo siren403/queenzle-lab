@@ -34,6 +34,21 @@
 			? '탭: 없음 → X → 가설 · 길게 누르기: 퀸 확정'
 			: '탭: 없음 → X · 길게 누르기: 퀸 확정'
 	);
+	const boardStats = $derived.by(() => {
+		if (!session) {
+			return { xs: 0, hypotheses: 0, queens: 0 };
+		}
+
+		return session.cells.reduce(
+			(stats, mark) => {
+				if (mark === 'x' || mark === 'fixed-x') stats.xs += 1;
+				if (mark === 'hypothesis') stats.hypotheses += 1;
+				if (mark === 'queen') stats.queens += 1;
+				return stats;
+			},
+			{ xs: 0, hypotheses: 0, queens: 0 }
+		);
+	});
 
 	function formatSavedAt(savedAt: string): string {
 		return new Intl.DateTimeFormat('ko-KR', {
@@ -209,6 +224,7 @@
 					</p>
 				</div>
 				<div class="status-badges">
+					<a class="btn ghost" href={resolve('/')}>홈으로</a>
 					<span class="metric-chip">{statusLabel}</span>
 					<span class="metric-chip">{sourceLabel}</span>
 					<span class="metric-chip">{selectedSize}x{selectedSize}</span>
@@ -223,6 +239,24 @@
 				<strong>입력 안내</strong>
 				<span>{boardHint}</span>
 				<span>{viewModel?.message}</span>
+				<span class="subtle"
+					>보드 위 터치는 드래그 마킹과 길게 누르기 확정을 위해 페이지 스크롤보다 조작이 우선됩니다.</span
+				>
+			</div>
+
+			<div class="board-stats" aria-label="현재 보드 통계">
+				<div class="metric" data-testid="stat-xs">
+					<strong>엑스 {boardStats.xs}</strong>
+					<span class="subtle">확정 엑스 포함</span>
+				</div>
+				<div class="metric" data-testid="stat-hypotheses">
+					<strong>가설 {boardStats.hypotheses}</strong>
+					<span class="subtle">추론용 임시 마커</span>
+				</div>
+				<div class="metric" data-testid="stat-queens">
+					<strong>퀸 {boardStats.queens}</strong>
+					<span class="subtle">확정된 정답 퀸</span>
+				</div>
 			</div>
 
 			<div class="snapshot-section">
@@ -588,6 +622,12 @@
 		gap: 12px;
 	}
 
+	.board-stats {
+		display: grid;
+		grid-template-columns: repeat(3, minmax(0, 1fr));
+		gap: 12px;
+	}
+
 	.mobile-bar {
 		position: sticky;
 		bottom: 10px;
@@ -638,6 +678,10 @@
 		.snapshot-card {
 			min-width: 160px;
 			padding: 10px;
+		}
+
+		.board-stats {
+			grid-template-columns: 1fr;
 		}
 
 		.snapshot-preview {
