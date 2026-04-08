@@ -52,6 +52,7 @@ interface CellRenderState {
 	x: number;
 	y: number;
 	elevated: boolean;
+	renderPriority: number;
 }
 
 export class PixiBoardRenderer {
@@ -288,16 +289,19 @@ export class PixiBoardRenderer {
 
 		const now = performance.now();
 		const states = this.viewModel.cells.map((cell) => this.buildCellRenderState(cell, now));
+		const orderedStates = [...states].sort(
+			(left, right) => left.renderPriority - right.renderPriority
+		);
 
-		for (const state of states) {
+		for (const state of orderedStates) {
 			this.drawCellBase(state, now);
 		}
 
-		for (const state of states.filter((candidate) => !candidate.elevated)) {
+		for (const state of orderedStates.filter((candidate) => !candidate.elevated)) {
 			this.drawCellDecorations(state, now, this.effectLayer, this.markerLayer);
 		}
 
-		for (const state of states.filter((candidate) => candidate.elevated)) {
+		for (const state of orderedStates.filter((candidate) => candidate.elevated)) {
 			this.drawCellDecorations(state, now, this.topEffectLayer, this.topMarkerLayer);
 		}
 	}
@@ -329,8 +333,25 @@ export class PixiBoardRenderer {
 				chargeProgress > 0 ||
 				animation?.preset === 'queen-error' ||
 				animation?.preset === 'queen-success' ||
-				animation?.preset === 'hypothesis-contradiction'
+				animation?.preset === 'hypothesis-contradiction',
+			renderPriority: this.getRenderPriority(cell, animation, chargeProgress)
 		};
+	}
+
+	private getRenderPriority(
+		cell: BoardCellView,
+		animation: CellAnimation | null,
+		chargeProgress: number
+	): number {
+		let priority = 0;
+		if (cell.mark === 'fixed-x') priority += 1;
+		if (cell.mark === 'x') priority += 2;
+		if (cell.mark === 'hypothesis') priority += 4;
+		if (cell.mark === 'queen') priority += 6;
+		if (cell.isHighlighted) priority += 20;
+		if (chargeProgress > 0) priority += 30;
+		if (animation) priority += 40 + this.getAnimationPriority(animation.preset) * 10;
+		return priority;
 	}
 
 	private drawCellBase(state: CellRenderState, now: number): void {
