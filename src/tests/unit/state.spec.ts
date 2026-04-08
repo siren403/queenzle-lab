@@ -79,4 +79,14 @@ describe('session state', () => {
 			expect(session.cells[index]).toBe('queen');
 		}
 	});
+
+	it('removes a hypothesis marker on the next tap', () => {
+		let session = createSessionState(puzzle, flags);
+		session = applyCommand(session, { type: 'cycleCell', index: 8 });
+		session = applyCommand(session, { type: 'cycleCell', index: 8 });
+		expect(session.cells[8]).toBe('hypothesis');
+
+		session = applyCommand(session, { type: 'cycleCell', index: 8 });
+		expect(session.cells[8]).toBe('empty');
+	});
 });
