@@ -7,11 +7,8 @@
 </svelte:head>
 
 <div class="page-shell">
-	<section
-		class="glass-panel"
-		style="display:grid; gap:24px; padding:32px; grid-template-columns: minmax(0, 1.4fr) minmax(300px, 0.9fr);"
-	>
-		<div style="display:grid; gap:18px;">
+	<section class="glass-panel hero-grid">
+		<div class="hero-copy">
 			<span class="eyebrow">연구 빌드</span>
 			<h1 style="margin:0; font-size:clamp(2.5rem, 5vw, 4.75rem); line-height:0.95;">모던 퀸즐</h1>
 			<p style="margin:0; font-size:1.1rem; line-height:1.7; color:var(--muted); max-width:62ch;">
@@ -24,7 +21,7 @@
 			</div>
 		</div>
 
-		<div style="display:grid; gap:14px;">
+		<div class="hero-metrics">
 			<div class="metric">
 				<span class="eyebrow" style="width:max-content;">핵심 목표</span>
 				<strong>같은 퍼즐, 다른 체감.</strong>
@@ -47,3 +44,40 @@
 		</div>
 	</section>
 </div>
+
+<style>
+	.hero-grid {
+		display: grid;
+		gap: 24px;
+		padding: 32px;
+		grid-template-columns: minmax(0, 1.4fr) minmax(300px, 0.9fr);
+	}
+
+	.hero-copy,
+	.hero-metrics {
+		display: grid;
+		gap: 18px;
+	}
+
+	.hero-metrics {
+		gap: 14px;
+	}
+
+	@media (max-width: 900px) {
+		.hero-grid {
+			grid-template-columns: 1fr;
+		}
+	}
+
+	@media (max-width: 640px) {
+		.hero-grid {
+			padding: 20px;
+			gap: 18px;
+		}
+
+		.hero-copy,
+		.hero-metrics {
+			gap: 14px;
+		}
+	}
+</style>

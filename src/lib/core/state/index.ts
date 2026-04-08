@@ -7,9 +7,13 @@ import {
 } from '../commands';
 import { getCatalogPuzzle } from '../catalog';
 import { generatePuzzle } from '../generator';
+import { countSolutions } from '../solver';
 import {
 	applyFixedXFromQueens,
+	getBlockedIndexes,
 	getConflictsForQueenPlacement,
+	getForcedIndexes,
+	getHypothesisIndexes,
 	isCorrectQueen,
 	isSolved
 } from '../rules';
@@ -25,6 +29,54 @@ import type {
 
 function cloneCells(cells: SessionState['cells']): SessionState['cells'] {
 	return cells.slice();
+}
+
+function buildSolvedFeedback(session: SessionState): SelectionFeedback | null {
+	return {
+		id: `solved-${Date.now()}`,
+		kind: 'success',
+		reason: 'board-solved',
+		cells: session.puzzle.solution.slice(),
+		message: '퍼즐을 해결했어요.',
+		animationPreset: 'board-solved'
+	};
+}
+
+function buildHypothesisContradictionFeedback(
+	session: SessionState,
+	nextCells: SessionState['cells']
+): SelectionFeedback | null {
+	const hypotheses = getHypothesisIndexes(nextCells);
+	if (hypotheses.length === 0) return null;
+
+	const forced = new Set(getForcedIndexes(nextCells));
+	const blocked = new Set(getBlockedIndexes(nextCells));
+	const result = countSolutions(session.puzzle, {
+		forced,
+		blocked,
+		limit: 1
+	});
+
+	if (result.count > 0) return null;
+
+	return {
+		id: `hypothesis-contradiction-${Date.now()}`,
+		kind: 'warning',
+		reason: 'hypothesis-contradiction',
+		cells: [...forced].sort((left, right) => left - right),
+		message: '가설 배치가 현재 제약과 모순돼요.',
+		animationPreset: 'hypothesis-contradiction'
+	};
+}
+
+function deriveBoardFeedback(
+	session: SessionState,
+	nextCells: SessionState['cells']
+): SelectionFeedback | null {
+	const contradiction = buildHypothesisContradictionFeedback(session, nextCells);
+	if (contradiction) return contradiction;
+	if (isSolved(session.puzzle, nextCells)) return buildSolvedFeedback(session);
+	return null;
 }
 
 function pushHistory(session: SessionState, nextCells: SessionState['cells']): SessionState {
@@ -44,15 +96,7 @@ function pushHistory(session: SessionState, nextCells: SessionState['cells']): S
 			past,
 			future: []
 		},
-		selectionFeedback: isSolved(session.puzzle, nextCells)
-			? {
-					id: `solved-${Date.now()}`,
-					kind: 'success',
-					cells: session.puzzle.solution.slice(),
-					message: '퍼즐을 해결했어요.',
-					animationPreset: 'board-solved'
-				}
-			: null
+		selectionFeedback: deriveBoardFeedback(session, nextCells)
 	};
 }
 
@@ -112,6 +156,7 @@ export function applyCommand(session: SessionState, command: GameCommand): Sessi
 				return withFeedback(session, {
 					id: `queen-error-${command.index}-${Date.now()}`,
 					kind: 'error',
+					reason: 'queen-conflict',
 					cells: [command.index],
 					message: '이 칸은 정답 퀸 위치가 아니에요.',
 					animationPreset: 'queen-error'
@@ -126,13 +171,19 @@ export function applyCommand(session: SessionState, command: GameCommand): Sessi
 				session.puzzle,
 				stampQueenCell(stripFixedMarks(session.cells), command.index)
 			);
-			return withFeedback(pushHistory(session, nextCells), {
-				id: `queen-success-${command.index}-${Date.now()}`,
-				kind: 'success',
-				cells: [command.index],
-				message: '퀸을 확정했어요.',
-				animationPreset: 'queen-success'
-			});
+			const nextSession = pushHistory(session, nextCells);
+			const contradiction = buildHypothesisContradictionFeedback(nextSession, nextSession.cells);
+			return withFeedback(
+				nextSession,
+				contradiction ?? {
+					id: `queen-success-${command.index}-${Date.now()}`,
+					kind: 'success',
+					reason: 'queen-success',
+					cells: [command.index],
+					message: '퀸을 확정했어요.',
+					animationPreset: 'queen-success'
+				}
+			);
 		}
 		case 'paintCell':
 			return session.flags.dragMarking
@@ -184,6 +235,7 @@ export function applyCommand(session: SessionState, command: GameCommand): Sessi
 				{
 					id: `snapshot-${Date.now()}`,
 					kind: 'info',
+					reason: 'snapshot-saved',
 					cells: [],
 					message: '스냅샷을 저장했어요.',
 					animationPreset: 'snapshot-saved'

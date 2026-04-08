@@ -39,7 +39,8 @@ export function countSolutions(puzzle: PuzzleSpec, options: SolveOptions = {}): 
 	const regionMap = getRegionMap(puzzle);
 
 	for (const queenIndex of forced) {
-		if (!canPlaceQueen(puzzle, queenIndex, [], new Set<number>(), new Set<number>())) {
+		const otherForced = [...forced].filter((candidate) => candidate !== queenIndex);
+		if (!canPlaceQueen(puzzle, queenIndex, otherForced, blocked, new Set<number>())) {
 			return { count: 0, solutions: [] };
 		}
 	}

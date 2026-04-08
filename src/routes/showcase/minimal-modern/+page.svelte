@@ -8,3 +8,15 @@
 		</p>
 	</section>
 </div>
+
+<style>
+	@media (max-width: 640px) {
+		.page-shell {
+			padding: 20px;
+		}
+
+		.glass-panel {
+			padding: 20px !important;
+		}
+	}
+</style>

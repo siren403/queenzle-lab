@@ -21,6 +21,14 @@ export function getHypothesisIndexes(cells: CellMark[]): number[] {
 	return cells.flatMap((mark, index) => (mark === 'hypothesis' ? [index] : []));
 }
 
+export function getForcedIndexes(cells: CellMark[]): number[] {
+	return cells.flatMap((mark, index) => (mark === 'queen' || mark === 'hypothesis' ? [index] : []));
+}
+
+export function getBlockedIndexes(cells: CellMark[]): number[] {
+	return cells.flatMap((mark, index) => (mark === 'x' || mark === 'fixed-x' ? [index] : []));
+}
+
 export function getIndexesForRow(row: number, size: number): number[] {
 	return range(size).map((col) => toIndex(row, col, size));
 }
@@ -79,6 +87,7 @@ export function getConflictsForQueenPlacement(
 	return {
 		id: `feedback-${index}-${Date.now()}`,
 		kind: 'error',
+		reason: 'queen-conflict',
 		cells: [...conflicts],
 		message: '이 위치에는 퀸을 확정할 수 없어요.',
 		animationPreset: 'queen-error'

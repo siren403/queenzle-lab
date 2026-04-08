@@ -22,9 +22,16 @@ const puzzle: PuzzleSpec = {
 describe('session state', () => {
 	it('tracks cycle rules, fixed-x, and snapshot restore', () => {
 		let session = createSessionState(puzzle, flags);
-		session = applyCommand(session, { type: 'cycleCell', index: 6 });
-		session = applyCommand(session, { type: 'cycleCell', index: 6 });
-		expect(session.cells[6]).toBe('hypothesis');
+		session = applyCommand(session, { type: 'cycleCell', index: 8 });
+		session = applyCommand(session, { type: 'cycleCell', index: 8 });
+		expect(session.cells[8]).toBe('hypothesis');
+		expect(session.selectionFeedback).toBeNull();
+
+		session = applyCommand(session, { type: 'cycleCell', index: 9 });
+		session = applyCommand(session, { type: 'cycleCell', index: 9 });
+		expect(session.cells[9]).toBe('hypothesis');
+		expect(session.selectionFeedback?.reason).toBe('hypothesis-contradiction');
+		expect(session.selectionFeedback?.kind).toBe('warning');
 
 		session = applyCommand(session, { type: 'paintCell', index: 1, mode: 'mark-x' });
 		session = applyCommand(session, { type: 'paintCell', index: 2, mode: 'mark-x' });

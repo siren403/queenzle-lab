@@ -419,6 +419,9 @@
 		<button class="btn" type="button" onclick={() => dispatch({ type: 'resetBoard' })}>
 			초기화
 		</button>
+		<button class="btn" type="button" onclick={() => dispatch({ type: 'saveSnapshot' })}>
+			스냅샷 저장
+		</button>
 		<button class="btn ghost" type="button" onclick={() => (panelOpen = !panelOpen)}> 설정 </button>
 	</div>
 </div>
@@ -492,6 +495,8 @@
 		gap: 12px;
 		overflow-x: auto;
 		padding-bottom: 4px;
+		scroll-snap-type: x proximity;
+		overscroll-behavior-x: contain;
 	}
 
 	.snapshot-card {
@@ -504,6 +509,7 @@
 		background: rgba(255, 255, 255, 0.84);
 		cursor: pointer;
 		text-align: left;
+		scroll-snap-align: start;
 	}
 
 	.snapshot-preview {
@@ -585,12 +591,14 @@
 
 	.mobile-bar {
 		position: sticky;
-		bottom: 12px;
+		bottom: 10px;
 		display: none;
-		grid-template-columns: repeat(4, minmax(0, 1fr));
-		gap: 10px;
-		padding: 12px;
+		grid-template-columns: repeat(3, minmax(0, 1fr));
+		gap: 8px;
+		padding: 10px;
 		margin-top: 18px;
+		backdrop-filter: blur(18px);
+		box-shadow: 0 12px 32px rgba(58, 46, 108, 0.12);
 	}
 
 	.mobile-only {
@@ -605,7 +613,7 @@
 
 	@media (max-width: 767px) {
 		.page-shell {
-			padding-bottom: 92px;
+			padding-bottom: 112px;
 		}
 
 		.board-head,
@@ -614,15 +622,71 @@
 			align-items: stretch;
 		}
 
+		.board-stack,
+		.control-panel {
+			padding: 16px;
+			gap: 16px;
+		}
+
+		.board-head {
+			gap: 12px;
+		}
+
+		.glass-strip {
+			padding: 12px 14px;
+		}
+
+		.snapshot-card {
+			min-width: 160px;
+			padding: 10px;
+		}
+
+		.snapshot-preview {
+			gap: 1px;
+			padding: 3px;
+		}
+
+		.preview-cell {
+			font-size: 0.56rem;
+		}
+
 		.panel-body {
 			display: none;
+			gap: 14px;
+		}
+
+		.control-panel {
+			padding-bottom: 14px;
 		}
 
 		.control-panel.open .panel-body {
 			display: grid;
+			max-height: calc(100dvh - 242px);
+			overflow: auto;
+			padding-right: 2px;
 		}
 
-		.mobile-bar,
+		.control-panel :global(.button-row) {
+			display: grid;
+			grid-template-columns: repeat(2, minmax(0, 1fr));
+			gap: 8px;
+		}
+
+		.control-panel :global(.button-row .btn),
+		.control-panel :global(.button-row input),
+		.control-panel :global(.button-row select) {
+			width: 100%;
+		}
+
+		.toggle-row {
+			min-height: 48px;
+			padding: 0 4px;
+		}
+
+		.mobile-bar {
+			display: grid;
+		}
+
 		.mobile-only {
 			display: grid;
 		}

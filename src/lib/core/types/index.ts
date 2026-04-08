@@ -8,10 +8,17 @@ export type AnimationPreset =
 	| 'mark-x'
 	| 'erase-x'
 	| 'hypothesis'
+	| 'hypothesis-contradiction'
 	| 'queen-success'
 	| 'queen-error'
 	| 'snapshot-saved'
 	| 'board-solved';
+export type SelectionFeedbackReason =
+	| 'queen-conflict'
+	| 'queen-success'
+	| 'snapshot-saved'
+	| 'board-solved'
+	| 'hypothesis-contradiction';
 
 export interface FeatureFlags {
 	dragMarking: boolean;
@@ -48,7 +55,8 @@ export interface HistoryState {
 
 export interface SelectionFeedback {
 	id: string;
-	kind: 'error' | 'success' | 'info';
+	kind: 'error' | 'success' | 'info' | 'warning';
+	reason: SelectionFeedbackReason;
 	cells: number[];
 	message: string;
 	animationPreset: AnimationPreset;

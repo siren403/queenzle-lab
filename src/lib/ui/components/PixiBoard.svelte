@@ -59,6 +59,12 @@
 		border: 1px solid rgba(128, 117, 169, 0.16);
 		overflow: hidden;
 		box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.6);
+		touch-action: none;
+		overscroll-behavior: contain;
+		user-select: none;
+		-webkit-user-select: none;
+		-webkit-touch-callout: none;
+		-webkit-tap-highlight-color: transparent;
 	}
 
 	:global(.pixi-host canvas) {
@@ -69,15 +75,15 @@
 
 	@media (max-width: 960px) {
 		.pixi-host {
-			min-height: 60vw;
-			height: 60vw;
+			min-height: 62vw;
+			height: 62vw;
 		}
 	}
 
 	@media (max-width: 640px) {
 		.pixi-host {
-			min-height: 78vw;
-			height: 78vw;
+			min-height: 76vw;
+			height: 76vw;
 		}
 	}
 </style>

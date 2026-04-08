@@ -13,11 +13,22 @@ import { PIXI_THEME, REGION_COLORS } from '../theme/palette';
 
 const LONG_PRESS_MS = 520;
 
+type RenderEffect =
+	| 'mark-x'
+	| 'erase-x'
+	| 'hypothesis'
+	| 'queen-success'
+	| 'queen-error'
+	| 'fixed-x-wave'
+	| 'board-solved'
+	| 'snapshot-saved';
+
 interface CellAnimation {
 	index: number;
-	preset: AnimationPreset;
+	preset: RenderEffect;
 	startedAt: number;
 	duration: number;
+	delay?: number;
 	previousMark?: CellMark;
 }
 
@@ -81,7 +92,7 @@ export class PixiBoardRenderer {
 		if (!this.viewModel || !this.layout) return;
 		const now = performance.now();
 		this.animations = this.animations.filter(
-			(animation) => now - animation.startedAt <= animation.duration
+			(animation) => now - animation.startedAt <= (animation.delay ?? 0) + animation.duration
 		);
 
 		if (this.gesture && this.gesture.pointerType === 'touch' && !this.gesture.paintMode) {
@@ -107,12 +118,15 @@ export class PixiBoardRenderer {
 		if (!this.viewModel) return;
 		const now = performance.now();
 		const previousCells = this.previousViewModel?.cells ?? [];
+		const queens = this.viewModel.cells
+			.filter((cell) => cell.mark === 'queen')
+			.map((cell) => ({ row: cell.row, col: cell.col }));
 
 		for (const cell of this.viewModel.cells) {
 			const previous = previousCells[cell.index];
 			if (!previous || previous.mark === cell.mark) continue;
 			this.animations.push(
-				this.createTransitionAnimation(cell.index, previous.mark, cell.mark, now)
+				this.createTransitionAnimation(cell.index, previous.mark, cell.mark, now, queens)
 			);
 		}
 
@@ -123,9 +137,9 @@ export class PixiBoardRenderer {
 			for (const index of targets) {
 				this.animations.push({
 					index,
-					preset: feedback.animationPreset,
+					preset: this.mapFeedbackPreset(feedback.animationPreset),
 					startedAt: now,
-					duration: feedback.animationPreset === 'queen-error' ? 420 : 320
+					duration: this.getFeedbackDuration(feedback.animationPreset)
 				});
 			}
 			this.lastFeedbackId = feedback.id;
@@ -136,7 +150,8 @@ export class PixiBoardRenderer {
 		index: number,
 		previousMark: CellMark,
 		nextMark: CellMark,
-		startedAt: number
+		startedAt: number,
+		queens: Array<{ row: number; col: number }>
 	): CellAnimation {
 		if (previousMark === 'x' && nextMark === 'empty') {
 			return { index, preset: 'erase-x', startedAt, duration: 220, previousMark };
@@ -145,38 +160,57 @@ export class PixiBoardRenderer {
 			return { index, preset: 'hypothesis', startedAt, duration: 260, previousMark };
 		}
 		if (nextMark === 'queen') {
-			return { index, preset: 'queen-success', startedAt, duration: 320, previousMark };
+			return { index, preset: 'queen-success', startedAt, duration: 420, previousMark };
+		}
+		if (nextMark === 'fixed-x') {
+			return {
+				index,
+				preset: 'fixed-x-wave',
+				startedAt,
+				duration: 320,
+				delay: this.getFixedXDelay(index, queens),
+				previousMark
+			};
 		}
 		return { index, preset: 'mark-x', startedAt, duration: 220, previousMark };
 	}
 
 	private draw(): void {
 		if (!this.viewModel || !this.layout) return;
+		const now = performance.now();
 		for (const child of this.boardLayer.removeChildren()) {
 			child.destroy();
 		}
 
 		for (const cell of this.viewModel.cells) {
-			this.drawCell(cell);
+			this.drawCell(cell, now);
 		}
 	}
 
-	private drawCell(cell: BoardCellView): void {
+	private drawCell(cell: BoardCellView, now: number): void {
 		if (!this.layout || !this.viewModel) return;
-		const animation = this.getAnimation(cell.index);
+		const animations = this.getAnimations(cell.index, now);
+		const primaryAnimation = this.pickPrimaryAnimation(animations);
 		const chargeProgress = this.getChargeProgressForCell(cell.index);
-		const offsetX = animation?.preset === 'queen-error' ? this.getShakeOffset(animation) : 0;
+		const offsetX =
+			primaryAnimation?.preset === 'queen-error' ? this.getShakeOffset(primaryAnimation, now) : 0;
+		const offsetY =
+			primaryAnimation?.preset === 'queen-error'
+				? this.getShakeOffset(primaryAnimation, now, true)
+				: 0;
 		const x = this.layout.x + cell.col * this.layout.cellSize + offsetX;
-		const y = this.layout.y + cell.row * this.layout.cellSize;
+		const y = this.layout.y + cell.row * this.layout.cellSize + offsetY;
 		const baseColor =
 			cell.mark === 'fixed-x' ? 0xe5e5ea : REGION_COLORS[cell.regionId % REGION_COLORS.length];
-		const borderColor = this.getBorderColor(cell, animation);
+		const borderColor = this.getBorderColor(cell, primaryAnimation);
+		const cellOpacity = this.getCellAlpha(cell, primaryAnimation, now);
+		const scalePulse = this.getCellScale(primaryAnimation, now);
 		const scaleBoost =
-			(animation?.preset === 'mark-x' ||
-				animation?.preset === 'hypothesis' ||
-				animation?.preset === 'queen-success') &&
-			animation
-				? 1 + 0.1 * (1 - this.getAnimationProgress(animation))
+			(primaryAnimation?.preset === 'mark-x' ||
+				primaryAnimation?.preset === 'hypothesis' ||
+				primaryAnimation?.preset === 'queen-success') &&
+			primaryAnimation
+				? (1 + 0.1 * (1 - this.getAnimationProgress(primaryAnimation, now))) * scalePulse
 				: chargeProgress > 0
 					? 1 + 0.05 * chargeProgress
 					: 1;
@@ -191,10 +225,10 @@ export class PixiBoardRenderer {
 				height,
 				14
 			)
-			.fill({ color: baseColor, alpha: this.getCellAlpha(cell, animation) })
+			.fill({ color: baseColor, alpha: cellOpacity })
 			.stroke({
 				color: borderColor,
-				width: cell.isHighlighted || animation?.preset === 'queen-error' ? 4 : 2
+				width: cell.isHighlighted || primaryAnimation?.preset === 'queen-error' ? 4 : 2
 			});
 
 		graphics.eventMode = 'static';
@@ -202,15 +236,29 @@ export class PixiBoardRenderer {
 		graphics.on('pointerdown', (event) => this.handlePointerDown(cell, event));
 		this.boardLayer.addChild(graphics);
 
-		this.drawChargeRing(cell, x, y, chargeProgress);
-		this.drawMarker(cell, x, y, animation);
+		if (primaryAnimation?.preset === 'queen-error') {
+			this.drawErrorTwin(x, y, primaryAnimation, now);
+		}
+		if (primaryAnimation?.preset === 'queen-success') {
+			this.drawSuccessHalo(x, y, primaryAnimation, now);
+		}
+		if (primaryAnimation?.preset === 'fixed-x-wave') {
+			this.drawFixedXWave(x, y, primaryAnimation, now);
+		}
+		if (primaryAnimation?.preset === 'board-solved') {
+			this.drawSolvedWash(x, y, primaryAnimation, now);
+		}
+
+		this.drawChargeRing(x, y, chargeProgress);
+		this.drawMarker(cell, x, y, primaryAnimation, now);
 	}
 
 	private drawMarker(
 		cell: BoardCellView,
 		x: number,
 		y: number,
-		animation: CellAnimation | null
+		animation: CellAnimation | null,
+		now: number
 	): void {
 		if (!this.layout) return;
 
@@ -228,37 +276,52 @@ export class PixiBoardRenderer {
 			}
 		});
 
-		const progress = animation ? this.getAnimationProgress(animation) : 1;
-		const alpha = animation?.preset === 'erase-x' ? 1 - progress : 0.6 + 0.4 * progress;
+		const progress = animation ? this.getAnimationProgress(animation, now) : 1;
+		const eased = this.easeOutBack(progress);
+		const alpha =
+			animation?.preset === 'erase-x'
+				? 1 - progress
+				: animation?.preset === 'queen-error'
+					? 0.9
+					: 0.6 + 0.4 * progress;
 		const scale =
 			animation?.preset === 'hypothesis' ||
 			animation?.preset === 'mark-x' ||
-			animation?.preset === 'queen-success'
-				? 0.82 + 0.18 * progress
+			animation?.preset === 'queen-success' ||
+			animation?.preset === 'fixed-x-wave'
+				? 0.76 + 0.24 * eased
 				: animation?.preset === 'erase-x'
 					? 1 - 0.25 * progress
-					: 1;
+					: animation?.preset === 'queen-error'
+						? 1 + 0.03 * Math.sin(progress * Math.PI * 4)
+						: 1;
 
 		marker.anchor.set(0.5);
 		marker.alpha = alpha;
 		marker.scale.set(scale);
 		marker.x = x + this.layout.cellSize / 2;
-		marker.y = y + this.layout.cellSize / 2;
+		marker.y =
+			y +
+			this.layout.cellSize / 2 +
+			(animation?.preset === 'queen-error' ? this.getShakeOffset(animation, now, true) * 0.35 : 0);
 		this.boardLayer.addChild(marker);
 	}
 
-	private drawChargeRing(cell: BoardCellView, x: number, y: number, chargeProgress: number): void {
+	private drawChargeRing(x: number, y: number, chargeProgress: number): void {
 		if (!this.layout || chargeProgress <= 0) return;
 		const ring = new Graphics();
-		ring.circle(
-			x + this.layout.cellSize / 2,
-			y + this.layout.cellSize / 2,
-			this.layout.cellSize * 0.42
-		);
+		const radius = this.layout.cellSize * (0.34 + 0.08 * chargeProgress);
+		ring.circle(x + this.layout.cellSize / 2, y + this.layout.cellSize / 2, radius);
 		ring.stroke({
 			color: PIXI_THEME.queen,
-			width: 4,
-			alpha: 0.4 + 0.6 * chargeProgress
+			width: 3 + 2 * chargeProgress,
+			alpha: 0.3 + 0.7 * chargeProgress
+		});
+		ring.circle(x + this.layout.cellSize / 2, y + this.layout.cellSize / 2, radius * 0.72);
+		ring.stroke({
+			color: PIXI_THEME.accent ?? PIXI_THEME.queen,
+			width: 2,
+			alpha: 0.18 + 0.32 * chargeProgress
 		});
 		ring.alpha = chargeProgress;
 		this.boardLayer.addChild(ring);
@@ -273,8 +336,8 @@ export class PixiBoardRenderer {
 			}
 		});
 		preview.anchor.set(0.5);
-		preview.alpha = 0.25 + 0.5 * chargeProgress;
-		preview.scale.set(0.75 + chargeProgress * 0.35);
+		preview.alpha = 0.2 + 0.6 * chargeProgress;
+		preview.scale.set(0.7 + chargeProgress * 0.42);
 		preview.x = x + this.layout.cellSize / 2;
 		preview.y = y + this.layout.cellSize / 2;
 		this.boardLayer.addChild(preview);
@@ -417,20 +480,87 @@ export class PixiBoardRenderer {
 		return PIXI_THEME.gridStroke;
 	}
 
-	private getCellAlpha(cell: BoardCellView, animation: CellAnimation | null): number {
+	private getCellAlpha(cell: BoardCellView, animation: CellAnimation | null, now: number): number {
 		if (animation?.preset === 'queen-error') {
-			return 0.9 + 0.1 * Math.sin(this.getAnimationProgress(animation) * Math.PI * 4);
+			return 0.86 + 0.14 * Math.sin(this.getAnimationProgress(animation, now) * Math.PI * 4);
 		}
-		if (cell.mark === 'fixed-x') return 0.96;
+		if (animation?.preset === 'fixed-x-wave') {
+			return 0.88 + 0.12 * this.easeOutCubic(this.getAnimationProgress(animation, now));
+		}
+		if (animation?.preset === 'queen-success') {
+			return 0.92 + 0.08 * this.easeOutCubic(this.getAnimationProgress(animation, now));
+		}
+		if (animation?.preset === 'board-solved') {
+			return 0.94;
+		}
+		if (cell.mark === 'fixed-x') return 0.98;
 		return 0.9;
 	}
 
-	private getAnimation(index: number): CellAnimation | null {
-		return this.animations.find((animation) => animation.index === index) ?? null;
+	private getCellScale(animation: CellAnimation | null, now: number): number {
+		if (!animation) return 1;
+		const progress = this.getAnimationProgress(animation, now);
+		if (animation.preset === 'queen-error') {
+			return 1 + 0.02 * Math.sin(progress * Math.PI * 6);
+		}
+		if (animation.preset === 'fixed-x-wave') {
+			return 1 + 0.06 * this.easeOutBack(progress);
+		}
+		if (animation.preset === 'board-solved') {
+			return 1 + 0.03 * this.easeOutCubic(progress);
+		}
+		return 1;
 	}
 
-	private getAnimationProgress(animation: CellAnimation): number {
-		return Math.min(1, (performance.now() - animation.startedAt) / animation.duration);
+	private getAnimations(index: number, now: number): CellAnimation[] {
+		return this.animations.filter(
+			(animation) => this.isAnimationActive(animation, now) && animation.index === index
+		);
+	}
+
+	private pickPrimaryAnimation(animations: CellAnimation[]): CellAnimation | null {
+		if (animations.length === 0) return null;
+		return (
+			[...animations].sort(
+				(left, right) =>
+					this.getAnimationPriority(right.preset) - this.getAnimationPriority(left.preset)
+			)[0] ?? null
+		);
+	}
+
+	private getAnimationPriority(effect: RenderEffect): number {
+		switch (effect) {
+			case 'queen-error':
+				return 7;
+			case 'queen-success':
+				return 6;
+			case 'fixed-x-wave':
+				return 5;
+			case 'board-solved':
+				return 4;
+			case 'snapshot-saved':
+				return 3;
+			case 'hypothesis':
+				return 2;
+			case 'mark-x':
+				return 1;
+			case 'erase-x':
+				return 1;
+			default:
+				return 0;
+		}
+	}
+
+	private isAnimationActive(animation: CellAnimation, now: number): boolean {
+		return (
+			now - animation.startedAt >= (animation.delay ?? 0) &&
+			now - animation.startedAt <= (animation.delay ?? 0) + animation.duration
+		);
+	}
+
+	private getAnimationProgress(animation: CellAnimation, now: number): number {
+		const elapsed = now - animation.startedAt - (animation.delay ?? 0);
+		return this.clamp01(elapsed / animation.duration);
 	}
 
 	private getChargeProgressForCell(index: number): number {
@@ -445,8 +575,145 @@ export class PixiBoardRenderer {
 		return Math.min(1, (now - this.gesture.startedAt) / LONG_PRESS_MS);
 	}
 
-	private getShakeOffset(animation: CellAnimation): number {
-		const progress = this.getAnimationProgress(animation);
-		return Math.sin(progress * Math.PI * 8) * (1 - progress) * 7;
+	private getShakeOffset(animation: CellAnimation, now: number, vertical = false): number {
+		const progress = this.getAnimationProgress(animation, now);
+		const damped = (1 - progress) * (1 - progress);
+		const phase = vertical ? Math.PI / 2 : 0;
+		const spread = vertical ? 5 : 7;
+		return Math.sin(progress * Math.PI * 10 + phase) * damped * spread;
+	}
+
+	private drawErrorTwin(x: number, y: number, animation: CellAnimation, now: number): void {
+		if (!this.layout) return;
+		const progress = this.getAnimationProgress(animation, now);
+		const wobble = 1 + 0.08 * Math.sin(progress * Math.PI * 6);
+		for (const direction of [-1, 1]) {
+			const twin = new Graphics();
+			const offset = direction * (6 - 3 * progress);
+			twin
+				.roundRect(
+					x + offset + 4,
+					y - offset * 0.45 + 4,
+					this.layout.cellSize - 8,
+					this.layout.cellSize - 8,
+					12
+				)
+				.fill({ color: PIXI_THEME.feedback, alpha: 0.12 * (1 - progress) })
+				.stroke({ color: PIXI_THEME.feedback, width: 2, alpha: 0.5 * (1 - progress) });
+			twin.scale.set(wobble);
+			this.boardLayer.addChild(twin);
+		}
+	}
+
+	private drawSuccessHalo(x: number, y: number, animation: CellAnimation, now: number): void {
+		if (!this.layout) return;
+		const progress = this.easeOutBack(this.getAnimationProgress(animation, now));
+		const halo = new Graphics();
+		halo.circle(
+			x + this.layout.cellSize / 2,
+			y + this.layout.cellSize / 2,
+			this.layout.cellSize * (0.24 + 0.22 * progress)
+		);
+		halo.stroke({
+			color: PIXI_THEME.queen,
+			width: 2 + 3 * progress,
+			alpha: 0.35 * (1 - progress * 0.35)
+		});
+		halo.alpha = 0.7 * (1 - progress * 0.25);
+		this.boardLayer.addChild(halo);
+	}
+
+	private drawFixedXWave(x: number, y: number, animation: CellAnimation, now: number): void {
+		if (!this.layout) return;
+		const progress = this.easeOutCubic(this.getAnimationProgress(animation, now));
+		const wave = new Graphics();
+		wave
+			.roundRect(
+				x + 5 + (1 - progress) * 4,
+				y + 5 + (1 - progress) * 4,
+				this.layout.cellSize - 10 - (1 - progress) * 8,
+				this.layout.cellSize - 10 - (1 - progress) * 8,
+				12
+			)
+			.fill({ color: 0xdedee6, alpha: 0.12 * (1 - progress) })
+			.stroke({ color: 0x9f9fab, width: 2, alpha: 0.35 * (1 - progress) });
+		this.boardLayer.addChild(wave);
+	}
+
+	private drawSolvedWash(x: number, y: number, animation: CellAnimation, now: number): void {
+		if (!this.layout) return;
+		const progress = this.easeOutCubic(this.getAnimationProgress(animation, now));
+		const wash = new Graphics();
+		wash
+			.roundRect(x + 3, y + 3, this.layout.cellSize - 6, this.layout.cellSize - 6, 12)
+			.fill({ color: PIXI_THEME.solved, alpha: 0.08 * (1 - progress * 0.55) })
+			.stroke({ color: PIXI_THEME.solved, width: 1.5, alpha: 0.25 * (1 - progress) });
+		this.boardLayer.addChild(wash);
+	}
+
+	private mapFeedbackPreset(preset: AnimationPreset): RenderEffect {
+		switch (preset) {
+			case 'queen-error':
+				return 'queen-error';
+			case 'queen-success':
+				return 'queen-success';
+			case 'board-solved':
+				return 'board-solved';
+			case 'snapshot-saved':
+				return 'snapshot-saved';
+			case 'mark-x':
+				return 'mark-x';
+			case 'erase-x':
+				return 'erase-x';
+			case 'hypothesis':
+				return 'hypothesis';
+			default:
+				return 'mark-x';
+		}
+	}
+
+	private getFeedbackDuration(preset: AnimationPreset): number {
+		switch (preset) {
+			case 'queen-error':
+				return 480;
+			case 'queen-success':
+				return 420;
+			case 'board-solved':
+				return 540;
+			case 'snapshot-saved':
+				return 260;
+			case 'hypothesis':
+				return 260;
+			case 'mark-x':
+			case 'erase-x':
+				return 220;
+			default:
+				return 240;
+		}
+	}
+
+	private getFixedXDelay(index: number, queens: Array<{ row: number; col: number }>): number {
+		if (!this.viewModel || queens.length === 0) return 0;
+		const cell = this.viewModel.cells[index];
+		const distance = queens.reduce((closest, queen) => {
+			const current = Math.abs(queen.row - cell.row) + Math.abs(queen.col - cell.col);
+			return Math.min(closest, current);
+		}, Number.POSITIVE_INFINITY);
+		return Math.max(0, distance * 18);
+	}
+
+	private easeOutCubic(value: number): number {
+		return 1 - Math.pow(1 - this.clamp01(value), 3);
+	}
+
+	private easeOutBack(value: number): number {
+		const c1 = 1.70158;
+		const c3 = c1 + 1;
+		const t = this.clamp01(value) - 1;
+		return 1 + c3 * t * t * t + c1 * t * t;
+	}
+
+	private clamp01(value: number): number {
+		return Math.max(0, Math.min(1, value));
 	}
 }
