@@ -102,6 +102,10 @@ export class PixiBoardRenderer {
 	}
 
 	update(viewModel: BoardViewModel, flags: FeatureFlags): void {
+		if (this.shouldHardResetVisualState(this.viewModel, viewModel)) {
+			this.resetVisualState();
+		}
+
 		this.previousViewModel = this.viewModel;
 		this.viewModel = viewModel;
 		this.flags = flags;
@@ -184,6 +188,27 @@ export class PixiBoardRenderer {
 			}
 			this.lastFeedbackId = feedback.id;
 		}
+	}
+
+	private shouldHardResetVisualState(
+		previous: BoardViewModel | null,
+		next: BoardViewModel
+	): boolean {
+		if (!previous) return false;
+		if (previous.size !== next.size) return true;
+
+		const previousHasMarks = previous.cells.some((cell) => cell.mark !== 'empty');
+		const nextHasMarks = next.cells.some((cell) => cell.mark !== 'empty');
+
+		return previousHasMarks && !nextHasMarks;
+	}
+
+	private resetVisualState(): void {
+		this.animations.clear();
+		this.gesture = null;
+		this.clearPendingClick();
+		this.lastMouseTap = null;
+		this.lastFeedbackId = null;
 	}
 
 	private queueAnimation(animation: CellAnimation): void {
