@@ -27,8 +27,9 @@ export function listCatalogEntries(size?: number): CatalogEntry[] {
 
 export function getCatalogPuzzle(size: 5 | 6 | 7, seed?: number): PuzzleSpec {
 	const entry =
-		CATALOG_ENTRIES.find((candidate) => candidate.size === size && candidate.seed === seed) ??
-		CATALOG_ENTRIES.find((candidate) => candidate.size === size);
+		seed === undefined
+			? CATALOG_ENTRIES.find((candidate) => candidate.size === size)
+			: CATALOG_ENTRIES.find((candidate) => candidate.size === size && candidate.seed === seed);
 
 	if (!entry) {
 		throw new Error(`No catalog entry exists for size ${size}.`);
