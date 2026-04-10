@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { getCatalogPuzzle } from '$lib/core/catalog';
 import { generatePuzzle } from '$lib/core/generator';
+import { resolvePuzzle } from '$lib/core/state';
 import { countSolutions, passesAntiPatternFilter } from '$lib/core/solver';
 
 describe('catalog and generator', () => {
@@ -31,5 +32,17 @@ describe('catalog and generator', () => {
 
 		expect(puzzle).not.toBeNull();
 		expect(countSolutions(puzzle!, { limit: 2 }).count).toBe(1);
+	});
+
+	it('uses the generator for non-catalog seeds before falling back by size', () => {
+		const puzzle = resolvePuzzle({
+			size: 7,
+			seed: 99999,
+			antiPatternFilter: true
+		});
+
+		expect(puzzle.source).toBe('generator');
+		expect(puzzle.seed).toBe(99999);
+		expect(new Set(puzzle.regions).size).toBe(7);
 	});
 });
